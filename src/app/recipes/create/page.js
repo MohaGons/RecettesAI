@@ -1,135 +1,330 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, X, Info } from 'lucide-react';
-import { useIngredients } from '@/app/hooks/useIngredients';
-import Link from 'next/link';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Plus, X, Info } from "lucide-react";
+import { useIngredients } from "@/app/hooks/useIngredients";
+import { useIntoleranceOptions } from "@/app/hooks/useOptions";
+import Link from "next/link";
 
 export default function CreateRecipePage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
-    Nom: '',
-    Description: '',
+    Nom: "",
+    Description: "",
     Ingrédients: [],
     TempsDePréparation: 30,
     NombreDePersonnes: 4,
-    Instructions: '',
-    TypeDePlat: 'Plat principal',
-    IntolérancesAlimentaires: []
+    Instructions: "",
+    TypeDePlat: "Plat principal",
+    IntolérancesAlimentaires: [],
   });
-  const [searchIngredient, setSearchIngredient] = useState('');
-  
+  const [selectedIngredientId, setSelectedIngredientId] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState("");
+
   // Recherche d'ingrédients dans Airtable
-  const { ingredients } = useIngredients({ 
-    nom: searchIngredient.length > 2 ? searchIngredient : '' 
-  });
-  
-  const filteredIngredients = searchIngredient.length > 2 
-    ? ingredients.slice(0, 5) 
-    : [];
-  
+  const { ingredients } = useIngredients();
+
+  // Récupération dynamique des options d'intolérances/allergies alimentaires
+  const {
+    options: apiOptions,
+    isLoading: optionsLoading,
+    isError: optionsError,
+  } = useIntoleranceOptions();
+
+  // Options de secours au cas où l'API échoue
+  const fallbackOptions = [
+    "Sans gluten",
+    "Sans lactose",
+    "Sans sucre ajouté",
+    "Végétalien",
+  ];
+
+  // Utilise les options de l'API ou les options de secours si l'API échoue ou renvoie un tableau vide
+  const allergyOptions =
+    Array.isArray(apiOptions) && apiOptions.length > 0
+      ? apiOptions
+      : fallbackOptions;
+
   // Types de plats disponibles
   const dishTypes = [
-    'Entrée', 'Plat principal', 'Dessert', 'Salade', 'Soupe', 'Apéritif'
+    "Entrée",
+    "Plat principal",
+    "Dessert",
+    "Salade",
+    "Soupe",
+    "Apéritif",
   ];
-  
-  // Options d'intolérances/allergies alimentaires
-  const allergyOptions = [
-    'Gluten', 'Lactose', 'Fruits à coque', 'Arachides', 
-    'Œufs', 'Soja', 'Poisson', 'Crustacés', 'Végétarien', 'Végétalien'
-  ];
-  
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: value
+      [name]: value,
     });
   };
-  
+
   const handleNumberChange = (e) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: parseInt(value) || 0
+      [name]: parseInt(value) || 0,
     });
   };
-  
+
   const addIngredient = () => {
-    if (searchIngredient.trim() === '') return;
-    
+    if (!selectedIngredientId) return;
+    const selectedIngredient = ingredients.find(
+      (i) => i.id === selectedIngredientId
+    );
+    if (!selectedIngredient) return;
     setFormData({
       ...formData,
-      Ingrédients: [...formData.Ingrédients, searchIngredient]
+      Ingrédients: [...formData.Ingrédients, selectedIngredientId],
     });
-    setSearchIngredient('');
+    setSelectedIngredientId("");
   };
-  
+
   const removeIngredient = (index) => {
     const updatedIngredients = [...formData.Ingrédients];
     updatedIngredients.splice(index, 1);
     setFormData({
       ...formData,
-      Ingrédients: updatedIngredients
+      Ingrédients: updatedIngredients,
     });
   };
-  
+
   const toggleAllergy = (allergy) => {
     const current = [...formData.IntolérancesAlimentaires];
-    
+
     if (current.includes(allergy)) {
       setFormData({
         ...formData,
-        IntolérancesAlimentaires: current.filter(a => a !== allergy)
+        IntolérancesAlimentaires: current.filter((a) => a !== allergy),
       });
     } else {
       setFormData({
         ...formData,
-        IntolérancesAlimentaires: [...current, allergy]
+        IntolérancesAlimentaires: [...current, allergy],
       });
     }
   };
-  
+
   const nextStep = () => {
     setCurrentStep(currentStep + 1);
   };
-  
+
   const prevStep = () => {
     setCurrentStep(currentStep - 1);
   };
-  
+
+  const handleGenerateRecipe = async () => {
+    setIsGenerating(true);
+    setGenerationError("");
+    try {
+      // Préparer le prompt pour l'IA
+      const selectedIngredients = formData.Ingrédients.map((id) => {
+        const ing = ingredients.find((i) => i.id === id);
+        return ing ? ing.Nom : id;
+      });
+      const prompt = `Génère une recette originale en français avec les contraintes suivantes :\n\n- Type de plat : ${
+        formData.TypeDePlat
+      }\n- Temps de préparation : ${
+        formData.TempsDePréparation
+      } minutes\n- Nombre de personnes : ${
+        formData.NombreDePersonnes
+      }\n- Ingrédients imposés : ${selectedIngredients.join(
+        ", "
+      )}\n- Intolérances ou régimes à respecter : ${
+        formData.IntolérancesAlimentaires.join(", ") || "Aucune"
+      }\n\nDonne-moi :\n1. Un nom de recette\n2. Une courte description\n3. Les instructions détaillées étape par étape (une par ligne)\n4. (Optionnel) Des conseils ou variantes.`;
+
+      // Appel à l'API IA (à adapter selon ton backend)
+      const response = await fetch("/api/generate-recipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!response.ok) throw new Error("Erreur lors de la génération");
+      const data = await response.json();
+
+      // Nettoyer le nom de la recette
+      const cleanName = data.Nom.replace(/^#+\s*/, "")
+        .replace(/^1[.)-]?\s*/i, "")
+        .replace(/^Nom( de (la )?recette)?\s*:?[*\s]*/i, "")
+        .replace(/^de (la )?recette\s*:?[*\s]*/i, "")
+        .replace(/^Nom\s*:?[*\s]*/i, "")
+        .replace(/^:[*\s]*/, "")
+        .replace(/^[*\s]+/, "")
+        .trim();
+
+      // Nettoyer la description en enlevant le préfixe et les asterisques
+      const cleanDescription = data.Description.replace(/^#+\s*/, "")
+        .replace(/^\**2\.?\s*Description\s*:?\**\s*/i, "")
+        .replace(/^Description\s*:?\s*/i, "")
+        .replace(/\*\*/g, "")
+        .trim();
+
+      // Nettoyer les instructions en enlevant le préfixe et les asterisques
+      const cleanInstructions = data.Instructions.replace(/^#+\s*/, "")
+        .replace(/^\**3\.?\s*Instructions\s*:?\**\s*/i, "")
+        .replace(/^Instructions\s*:?\s*/i, "")
+        .replace(/\*\*/g, "")
+        .trim();
+
+      console.log("Description brute IA:", data.Description);
+      console.log("Description nettoyée:", cleanDescription);
+      console.log("Instructions brutes IA:", data.Instructions);
+      console.log("Instructions nettoyées:", cleanInstructions);
+
+      setFormData({
+        ...formData,
+        Nom: cleanName,
+        Description: cleanDescription,
+        Instructions: cleanInstructions,
+      });
+      setCurrentStep(3);
+    } catch (e) {
+      console.error("Erreur de génération:", e);
+      setGenerationError("Erreur lors de la génération de la recette.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleSubmit = async () => {
     // Validation basique
-    if (!formData.Nom || formData.Ingrédients.length === 0 || !formData.Instructions) {
-      alert('Veuillez remplir tous les champs obligatoires');
+    if (
+      !formData.Nom ||
+      formData.Ingrédients.length === 0 ||
+      !formData.Instructions
+    ) {
+      alert("Veuillez remplir tous les champs obligatoires");
       return;
     }
-    
+
+    // Calcul des valeurs nutritionnelles à partir des ingrédients
+    const nutrition = formData.Ingrédients.reduce(
+      (acc, ingredientId) => {
+        const ing = ingredients.find((i) => i.id === ingredientId);
+        if (ing) {
+          acc.calories += Number(ing.Calories || 0);
+          acc.protein += Number(ing.Protéines || 0);
+          acc.carbs += Number(ing.Glucides || 0);
+          acc.fat += Number(ing.Lipides || 0);
+        }
+        return acc;
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+
+    // Définir une image selon le nom/type de plat
+    // Priorité aux images d'Unsplash pour compatibilité avec Airtable
+    let photoUrl;
+
     try {
-      const response = await fetch('/api/recettes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Erreur lors de la création de la recette');
+      console.log(
+        "Génération de l'URL de l'image pour:",
+        formData.Nom,
+        "Type:",
+        formData.TypeDePlat
+      );
+
+      // Préférer des URLs d'Unsplash plutôt que placehold.co
+      if (formData.Nom.toLowerCase().includes("salade")) {
+        photoUrl =
+          "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&auto=format&fit=crop";
+        console.log("URL choisie pour salade:", photoUrl);
+      } else if (formData.TypeDePlat === "Dessert") {
+        photoUrl =
+          "https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=800&auto=format&fit=crop";
+        console.log("URL choisie pour dessert:", photoUrl);
+      } else if (
+        formData.Nom.toLowerCase().includes("poulet") ||
+        formData.Ingrédients.some((id) => {
+          const ing = ingredients.find((i) => i.id === id);
+          return ing && ing.Nom.toLowerCase().includes("poulet");
+        })
+      ) {
+        photoUrl =
+          "https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=800&auto=format&fit=crop";
+        console.log("URL choisie pour poulet:", photoUrl);
+      } else if (formData.TypeDePlat === "Soupe") {
+        photoUrl =
+          "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800&auto=format&fit=crop";
+        console.log("URL choisie pour soupe:", photoUrl);
+      } else if (formData.TypeDePlat === "Entrée") {
+        photoUrl =
+          "https://images.unsplash.com/photo-1546241072-48010ad2862c?w=800&auto=format&fit=crop";
+        console.log("URL choisie pour entrée:", photoUrl);
+      } else if (formData.TypeDePlat === "Plat principal") {
+        photoUrl =
+          "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&auto=format&fit=crop";
+        console.log("URL choisie pour plat principal:", photoUrl);
+      } else if (formData.TypeDePlat === "Apéritif") {
+        photoUrl =
+          "https://images.unsplash.com/photo-1626200496000-ccb05f5b6b32?w=800&auto=format&fit=crop";
+        console.log("URL choisie pour apéritif:", photoUrl);
+      } else {
+        // Image par défaut générique
+        photoUrl =
+          "https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=800&auto=format&fit=crop";
+        console.log("URL d'image par défaut utilisée:", photoUrl);
       }
-      
+
+      console.log("URL d'image finale choisie:", photoUrl);
+    } catch (error) {
+      console.error("Erreur lors de la génération de l'URL de l'image:", error);
+      // Fallback en cas d'erreur - utiliser une URL d'Unsplash sûre
+      photoUrl =
+        "https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=800&auto=format&fit=crop";
+      console.log("URL d'image de fallback utilisée:", photoUrl);
+    }
+
+    // Ajoute les valeurs nutritionnelles et la photo au formData
+    const formDataToSend = {
+      ...formData,
+      CaloriesTotales: nutrition.calories,
+      ProtéinesTotales: nutrition.protein,
+      GlucidesTotaux: nutrition.carbs,
+      LipidesTotaux: nutrition.fat,
+      Photo: photoUrl,
+      // S'assurer que IntolérancesAlimentaires est toujours un tableau de strings
+      IntolérancesAlimentaires: Array.isArray(formData.IntolérancesAlimentaires)
+        ? formData.IntolérancesAlimentaires.map(String)
+        : [],
+    };
+
+    console.log("Données à envoyer:", formDataToSend);
+
+    try {
+      const response = await fetch("/api/recettes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formDataToSend),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Erreur API:", errorText);
+        throw new Error("Erreur lors de la création de la recette");
+      }
+
       const data = await response.json();
-      
+      console.log("Recette créée avec succès, ID:", data.id);
+
       // Redirection vers la page de détail
       router.push(`/recipes/${data.id}`);
     } catch (error) {
-      console.error('Erreur:', error);
-      alert('Une erreur est survenue lors de la création de la recette.');
+      console.error("Erreur:", error);
+      alert("Une erreur est survenue lors de la création de la recette.");
     }
   };
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-3xl mx-auto">
@@ -140,54 +335,24 @@ export default function CreateRecipePage() {
             </Link>
             <h1 className="text-2xl font-bold">Créer une nouvelle recette</h1>
           </div>
-          <div className="text-sm text-gray-500">
-            Étape {currentStep} sur 3
-          </div>
+          <div className="text-sm text-gray-500">Étape {currentStep} sur 3</div>
         </div>
-        
+
         {/* Progression */}
         <div className="w-full h-2 bg-gray-200 rounded-full mb-8">
-          <div 
+          <div
             className="h-full bg-green-600 rounded-full transition-all duration-300"
             style={{ width: `${(currentStep / 3) * 100}%` }}
           ></div>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           {currentStep === 1 && (
             <div>
-              <h2 className="text-xl font-semibold mb-6">Informations générales</h2>
-              
+              <h2 className="text-xl font-semibold mb-6">
+                Informations de base
+              </h2>
               <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nom de la recette <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="Nom"
-                    value={formData.Nom}
-                    onChange={handleInputChange}
-                    placeholder="Ex: Salade Méditerranéenne au Quinoa"
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    name="Description"
-                    value={formData.Description}
-                    onChange={handleInputChange}
-                    placeholder="Une brève description de votre recette..."
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    rows="3"
-                  ></textarea>
-                </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Type de plat
@@ -198,12 +363,13 @@ export default function CreateRecipePage() {
                     onChange={handleInputChange}
                     className="w-full p-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   >
-                    {dishTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
+                    {dishTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
                     ))}
                   </select>
                 </div>
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -218,7 +384,6 @@ export default function CreateRecipePage() {
                       className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
                   </div>
-                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Nombre de personnes
@@ -233,47 +398,25 @@ export default function CreateRecipePage() {
                     />
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-          
-          {currentStep === 2 && (
-            <div>
-              <h2 className="text-xl font-semibold mb-6">Ingrédients et allergènes</h2>
-              
-              <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ajouter des ingrédients <span className="text-red-500">*</span>
+                    Ajouter des ingrédients{" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <input
-                      type="text"
-                      value={searchIngredient}
-                      onChange={(e) => setSearchIngredient(e.target.value)}
-                      placeholder="Rechercher ou saisir un ingrédient..."
+                    <select
+                      value={selectedIngredientId}
+                      onChange={(e) => setSelectedIngredientId(e.target.value)}
                       className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                    {filteredIngredients.length > 0 && (
-                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredIngredients.map(ingredient => (
-                          <div
-                            key={ingredient.id}
-                            className="p-2 hover:bg-gray-100 cursor-pointer"
-                            onClick={() => {
-                              setSearchIngredient(`${ingredient.Nom} (${ingredient.Quantité || '100'}${ingredient.Unité || 'g'})`);
-                            }}
-                          >
-                            <div className="font-medium">{ingredient.Nom}</div>
-                            <div className="text-xs text-gray-500">
-                              {ingredient.Calories || 0} kcal / {ingredient.Quantité || 100}{ingredient.Unité || 'g'}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    >
+                      <option value="">Sélectionner un ingrédient...</option>
+                      {ingredients.map((ingredient) => (
+                        <option key={ingredient.id} value={ingredient.id}>
+                          {ingredient.Nom} ({ingredient.Calories || 0} kcal)
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  
                   <div className="mt-3">
                     <button
                       type="button"
@@ -284,25 +427,19 @@ export default function CreateRecipePage() {
                       Ajouter
                     </button>
                   </div>
-                </div>
-                
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">
-                    Ingrédients sélectionnés
-                  </h3>
-                  
-                  {formData.Ingrédients.length === 0 ? (
-                    <p className="text-gray-500 bg-gray-50 p-4 rounded-lg text-center">
-                      Aucun ingrédient ajouté
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {formData.Ingrédients.map((ingredient, index) => (
+                  <ul className="space-y-2 mt-2">
+                    {formData.Ingrédients.map((ingredientId, index) => {
+                      const ingredient = ingredients.find(
+                        (i) => i.id === ingredientId
+                      );
+                      return (
                         <li
                           key={index}
                           className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
                         >
-                          <span>{ingredient}</span>
+                          <span>
+                            {ingredient ? ingredient.Nom : ingredientId}
+                          </span>
                           <button
                             type="button"
                             onClick={() => removeIngredient(index)}
@@ -311,97 +448,143 @@ export default function CreateRecipePage() {
                             <X size={18} />
                           </button>
                         </li>
-                      ))}
-                    </ul>
-                  )}
+                      );
+                    })}
+                  </ul>
                 </div>
-                
                 <div>
                   <h3 className="text-sm font-medium text-gray-700 mb-3">
                     Intolérances ou régimes alimentaires
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {allergyOptions.map(allergy => (
-                      <div
-                        key={allergy}
-                        className={`
-                          p-3 rounded-lg border cursor-pointer
-                          ${formData.IntolérancesAlimentaires.includes(allergy) 
-                            ? 'bg-green-50 border-green-300 text-green-800' 
-                            : 'bg-white border-gray-300 text-gray-700'}
-                        `}
-                        onClick={() => toggleAllergy(allergy)}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.IntolérancesAlimentaires.includes(allergy)}
-                          onChange={() => toggleAllergy(allergy)}
-                          className="mr-2"
-                        />
-                        {allergy}
+                    {optionsLoading ? (
+                      <div className="col-span-3 text-center p-3">
+                        Chargement des options...
                       </div>
-                    ))}
+                    ) : (
+                      allergyOptions.map((allergy) => (
+                        <div
+                          key={allergy}
+                          className={`p-3 rounded-lg border cursor-pointer ${
+                            formData.IntolérancesAlimentaires.includes(allergy)
+                              ? "bg-green-50 border-green-300 text-green-800"
+                              : "bg-white border-gray-300 text-gray-700"
+                          }`}
+                          onClick={() => toggleAllergy(allergy)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.IntolérancesAlimentaires.includes(
+                              allergy
+                            )}
+                            onChange={() => toggleAllergy(allergy)}
+                            className="mr-2"
+                          />
+                          {allergy}
+                        </div>
+                      ))
+                    )}
                   </div>
+                  {optionsError && (
+                    <p className="text-sm text-red-500 mt-2">
+                      Impossible de charger les options depuis la base de
+                      données. Options de secours affichées.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
           )}
-          
-          {currentStep === 3 && (
+
+          {currentStep === 2 && (
             <div>
-              <h2 className="text-xl font-semibold mb-6">Instructions et finalisation</h2>
-              
-              <div className="space-y-6">
+              <h2 className="text-xl font-semibold mb-6">
+                Résumé de vos choix
+              </h2>
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Instructions de préparation <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    name="Instructions"
-                    value={formData.Instructions}
-                    onChange={handleInputChange}
-                    placeholder="Décrivez les étapes de préparation, une par ligne..."
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    rows="8"
-                    required
-                  ></textarea>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Écrivez chaque étape sur une nouvelle ligne.
-                  </p>
+                  <span className="font-medium">Type de plat :</span>{" "}
+                  {formData.TypeDePlat}
                 </div>
-                
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex">
-                    <Info size={20} className="text-green-600 mr-2 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium text-green-800">Création automatique</p>
-                      <p className="text-green-700 mt-1">
-                        L&apos;analyse nutritionnelle sera automatiquement calculée à partir des ingrédients.
-                      </p>
-                    </div>
-                  </div>
+                <div>
+                  <span className="font-medium">Temps de préparation :</span>{" "}
+                  {formData.TempsDePréparation} min
                 </div>
-                
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-medium mb-3">Résumé de la recette</h3>
-                  <ul className="space-y-2 text-sm text-gray-600">
-                    <li><span className="font-medium">Nom:</span> {formData.Nom}</li>
-                    <li><span className="font-medium">Type:</span> {formData.TypeDePlat}</li>
-                    <li><span className="font-medium">Préparation:</span> {formData.TempsDePréparation} min</li>
-                    <li><span className="font-medium">Pour:</span> {formData.NombreDePersonnes} personnes</li>
-                    <li><span className="font-medium">Ingrédients:</span> {formData.Ingrédients.length}</li>
-                    {formData.IntolérancesAlimentaires.length > 0 && (
-                      <li>
-                        <span className="font-medium">Régimes/intolérances:</span> {formData.IntolérancesAlimentaires.join(', ')}
-                      </li>
-                    )}
+                <div>
+                  <span className="font-medium">Nombre de personnes :</span>{" "}
+                  {formData.NombreDePersonnes}
+                </div>
+                <div>
+                  <span className="font-medium">Ingrédients :</span>
+                  <ul className="list-disc ml-6">
+                    {formData.Ingrédients.map((ingredientId, idx) => {
+                      const ingredient = ingredients.find(
+                        (i) => i.id === ingredientId
+                      );
+                      return (
+                        <li key={idx}>
+                          {ingredient ? ingredient.Nom : ingredientId}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
+                <div>
+                  <span className="font-medium">Intolérances/régimes :</span>{" "}
+                  {formData.IntolérancesAlimentaires.length > 0
+                    ? formData.IntolérancesAlimentaires.join(", ")
+                    : "Aucune"}
+                </div>
+              </div>
+              {generationError && (
+                <div className="text-red-500 mt-4">{generationError}</div>
+              )}
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={handleGenerateRecipe}
+                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                  disabled={isGenerating}
+                >
+                  {isGenerating
+                    ? "Génération en cours..."
+                    : "Générer la recette"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {currentStep === 3 && (
+            <div>
+              <h2 className="text-xl font-semibold mb-6">Recette générée</h2>
+              <div className="space-y-4">
+                <div>
+                  <span className="font-medium">Nom :</span> {formData.Nom}
+                </div>
+                <div>
+                  <span className="font-medium">Description :</span>{" "}
+                  {formData.Description}
+                </div>
+                <div>
+                  <span className="font-medium">Instructions :</span>
+                  <pre className="bg-gray-50 p-3 rounded-lg whitespace-pre-wrap">
+                    {formData.Instructions}
+                  </pre>
+                </div>
+              </div>
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                >
+                  Enregistrer la recette
+                </button>
               </div>
             </div>
           )}
         </div>
-        
+
         <div className="flex justify-between">
           {currentStep > 1 ? (
             <button
@@ -414,7 +597,7 @@ export default function CreateRecipePage() {
           ) : (
             <div></div>
           )}
-          
+
           {currentStep < 3 ? (
             <button
               type="button"
@@ -424,13 +607,7 @@ export default function CreateRecipePage() {
               Suivant
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
-            >
-              Créer la recette
-            </button>
+            <div></div>
           )}
         </div>
       </div>
