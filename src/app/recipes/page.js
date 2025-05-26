@@ -18,24 +18,6 @@ export default function RecipesPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <h1 className="text-3xl font-bold">Toutes les recettes</h1>
-        
-        <div className="flex space-x-3">
-          <Link 
-            href="/recipes/search" 
-            className="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg"
-          >
-            <Search size={18} className="mr-2" />
-            Recherche avancée
-          </Link>
-          
-          <Link 
-            href="/recipes/create" 
-            className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
-          >
-            <Plus size={18} className="mr-2" />
-            Nouvelle recette
-          </Link>
-        </div>
       </div>
       
       <div className="mb-8">
