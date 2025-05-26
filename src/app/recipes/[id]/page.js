@@ -330,12 +330,6 @@ export default function RecipeDetailPage() {
                 <Printer size={18} className="mr-2" />
                 Imprimer la recette
               </button>
-
-              <Link href={`/recipes/edit/${recipe.id}`}>
-                <button className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 rounded-lg text-white">
-                  Modifier la recette
-                </button>
-              </Link>
             </div>
           </div>
         </div>

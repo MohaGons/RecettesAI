@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# RecettesAI - Système de génération de recettes personnalisées
 
-## Getting Started
+## Description du projet
 
-First, run the development server:
+RecettesAI est une application web permettant de générer et gérer des recettes de cuisine personnalisées avec analyse nutritionnelle. L'application utilise l'intelligence artificielle pour créer des recettes adaptées aux préférences des utilisateurs et calculer automatiquement les valeurs nutritionnelles.
+
+## Fonctionnalités
+
+- **Visualisation des recettes** : Parcourir la liste des recettes précédemment créées
+- **Détail des recettes** : Consulter les instructions, ingrédients et analyses nutritionnelles (calories, protéines, glucides, lipides, vitamines, minéraux)
+- **Recherche avancée** : Filtrer les recettes par nom, ingrédient ou type de plat
+- **Tri personnalisé** : Organiser les résultats par date, calories ou temps de préparation
+- **Génération de recettes** : Créer de nouvelles recettes en spécifiant :
+  - Les ingrédients souhaités
+  - Le nombre de personnes
+  - Les intolérances alimentaires à prendre en compte
+
+## Technologies utilisées
+
+- **Frontend** : Next.js, React
+- **Base de données** : Airtable
+- **IA** : OpenAI pour la génération de recettes et l'analyse nutritionnelle
+
+## Installation et démarrage
+
+1. Cloner le dépôt
+
+```bash
+git clone https://github.com/votre-compte/RecettesAI.git
+cd RecettesAI
+```
+
+2. Installer les dépendances
+
+```bash
+npm install
+```
+
+3. Configurer les variables d'environnement
+   Créez un fichier `.env.local` à la racine du projet avec les variables suivantes :
+
+```
+AIRTABLE_API_KEY=votre_clé_api_airtable
+AIRTABLE_BASE_ID=votre_base_id
+OPENAI_API_KEY=votre_clé_api_openai
+```
+
+4. Lancer l'application en mode développement
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Accéder à l'application
+   Ouvrez votre navigateur à l'adresse [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Structure de la base de données Airtable
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+L'application utilise les tables suivantes :
 
-## Learn More
+- **Recettes** : Stockage des recettes générées
+- **Ingrédients** : Liste des ingrédients disponibles avec leurs valeurs nutritionnelles
+- **Types de plats** : Catégories de recettes (Entrée, Plat principal, Dessert, etc.)
+- **Intolérances** : Liste des allergènes et intolérances alimentaires
 
-To learn more about Next.js, take a look at the following resources:
+## Collaborateurs
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Mohammad GONS SAIB
+- Gokhan KABAR
+- Ali KHELIFA
